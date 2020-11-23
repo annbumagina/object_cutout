@@ -271,9 +271,7 @@ def find_and_cut(image_name, margin=0.22, segmentation="instance", alpha_matting
     plt.show()
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     np.set_printoptions(threshold=sys.maxsize, linewidth=sys.maxsize)
     find_and_cut(*sys.argv[1:])
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
