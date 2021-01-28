@@ -22,77 +22,6 @@ steps = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]
 click = (-1, -1)
 
 
-def shrink_segmap(image, margin):
-    if margin == 0:
-        return
-    n, m = image.shape
-    que = list()
-    for i in range(n):
-        for j in range(m):
-            if image[i, j] > 0:
-                if i == 0 or j == 0 or i == n - 1 or j == m - 1:
-                    que.append((i, j))
-                    image[i, j] = -1
-                else:
-                    for step_i, step_j in steps:
-                        if image[i + step_i, j + step_j] == 0 and image[i, j] > 0:
-                            que.append((i, j))
-                            image[i, j] = -1
-    for k in range(margin - 1):
-        new_que = list()
-        for i, j in que:
-            for step_i, step_j in steps:
-                new_i = i + step_i
-                new_j = j + step_j
-                if 0 < new_i < n and 0 < new_j < m \
-                        and image[new_i, new_j] > 0:
-                    new_que.append((new_i, new_j))
-                    image[new_i, new_j] = -1
-        que = new_que
-
-
-def expand_segmap(image, margin):
-    if margin == 0:
-        return
-    n, m = image.shape
-    que = list()
-    for i in range(n):
-        for j in range(m):
-            if image[i, j] == 0:
-                for step_i, step_j in steps:
-                    new_i = i + step_i
-                    new_j = j + step_j
-                    if 0 < new_i < n and 0 < new_j < m \
-                            and image[new_i, new_j] == -1 and image[i, j] == 0:
-                        image[i, j] = -2
-                        que.append((i, j))
-    for k in range(margin - 1):
-        new_que = list()
-        for i, j in que:
-            for step_i, step_j in steps:
-                new_i = i + step_i
-                new_j = j + step_j
-                if 0 < new_i < n and 0 < new_j < m \
-                        and image[new_i, new_j] == 0:
-                    new_que.append((new_i, new_j))
-                    image[new_i, new_j] = -2
-        que = new_que
-
-
-def to_trimap(image):
-    n, m = image.shape
-    trimap = np.empty((n, m), 'float64')
-    for i in range(n):
-        for j in range(m):
-            if image[i, j] < 0:
-                trimap[i, j] = 0.5
-            elif image[i, j] > 0:
-                trimap[i, j] = 1
-            else:
-                trimap[i, j] = 0
-    return trimap
-
-
 def onclick(event):
     global click
     if event.xdata is not None:
@@ -144,7 +73,7 @@ def semantic_segmentation(img):
         img = img.crop(box)
     else:
         img = T.CenterCrop(min_side).forward(img)
-    img.save("resized_img.jpg")
+    img.save("images/resized_img.jpg")
     img = T.Resize(224).forward(img)
     img = T.CenterCrop(224).forward(img)
     trf = T.Compose([T.ToTensor(),
@@ -200,7 +129,7 @@ def instance_segmentation(img, margin):
     y2 = ceil(y2) + margin
     img = np.stack(img.numpy(), axis=2)
     img = img[y1:y2 + 1, x1:x2 + 1]
-    save_image("resized_img.jpg", img)
+    save_image("images/resized_img.jpg", img)
 
     return om[y1:y2 + 1, x1:x2 + 1]
 
@@ -298,18 +227,18 @@ def cutout_object(image_path, trimap_path, margin, alpha_matting):
     foreground = estimate_foreground_ml(image, alpha)
     # save cutout
     cutout = stack_images(foreground, alpha)
-    save_image("image_cutout.png", cutout)
+    save_image("images/image_cutout.png", cutout)
 
     clean_up_alpha(alpha, image, margin)
     foreground = estimate_foreground_ml(image, alpha)
     # save cutout
     cutout = stack_images(foreground, alpha)
-    save_image("image_cutout2.png", cutout)
+    save_image("images/image_cutout2.png", cutout)
 
     foreground = estimate_foreground_ml(image, beta)
     # save cutout
     cutout = stack_images(foreground, beta)
-    save_image("image_cutout3.png", cutout)
+    save_image("images/image_cutout3.png", cutout)
 
 
 def random_colour_masks(image):
@@ -340,11 +269,11 @@ def find_and_cut(image_name, margin=0.22, segmentation="instance", alpha_matting
         raise Exception("No such segmentation algorithm")
 
     # shows segmentation
-    img = cv2.imread("resized_img.jpg")
+    img = cv2.imread("images/resized_img.jpg")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     rgb_mask = random_colour_masks(om)
     img = cv2.addWeighted(img, 1, rgb_mask, 0.5, 0)
-    cv2.imwrite("image_weighted.jpg", img)
+    cv2.imwrite("images/image_weighted.jpg", img)
     plt.imshow(img)
     plt.show()
 
@@ -355,23 +284,24 @@ def find_and_cut(image_name, margin=0.22, segmentation="instance", alpha_matting
     height = len(img_depth)
     img_depth[3 * height // 4:] = mmean - 1
     om[img_depth >= mmean] = 1
-    # for i in range(om.shape[0]):
-    #     for j in range(om.shape[1]):
-    #         if (om[i, j] < 0.9 and img_depth[i, j] > mmean):
-    #             om[i, j] = 0.5
     ####################################
     margin = get_margin(margin, om)
-    shrink_segmap(om, margin)
-    expand_segmap(om, margin)
-    trimap = to_trimap(om)
+    print(margin)
+    om[om > 0] = 1
+    kernel = np.ones((3, 3), np.uint8)
+    om_eroded = cv2.erode(om, kernel, iterations=margin)
+    om = cv2.dilate(om, kernel, iterations=margin)
+    om[om > 0] = 0.5
+    om[om_eroded > 0] = 1
+    trimap = om
     plt.imshow(trimap)
     plt.title("Here's your trimap")
     plt.show()
-    save_image("image_trimap.png", trimap)
+    save_image("images/image_trimap.png", trimap)
 
     # cutout object
-    cutout_object("resized_img.jpg", "image_trimap.png", margin, alpha_matting)
-    img_cutout = Image.open("image_cutout.png")
+    cutout_object("images/resized_img.jpg", "images/image_trimap.png", margin, alpha_matting)
+    img_cutout = Image.open("images/image_cutout.png")
     plt.imshow(img_cutout)
     plt.title("and cutout")
     plt.show()
@@ -379,18 +309,18 @@ def find_and_cut(image_name, margin=0.22, segmentation="instance", alpha_matting
 
 if __name__ == '__main__':
     np.set_printoptions(threshold=sys.maxsize, linewidth=sys.maxsize)
-    find_and_cut("girls.jpg", margin=0.1)
-    img_array = depth.find_depth4()
-    # img_array = np.load('girl_one.npy')
-    mmean = img_array.mean()
-    height = len(img_array)
-    img_array[3 * height // 4:] = mmean - 1
-    img_array[img_array < mmean] = mmean
-    img_array = (img_array - img_array.min()) / (img_array.max() - img_array.min())
-    print(np.max(img_array))
-    print(np.mean(img_array))
-    plt.imshow(img_array * 255)
-    plt.show()
-    im = Image.fromarray(img_array * 255)
-    im = im.convert("RGB")
-    im.save("image_depth.png")
+    find_and_cut("images/two_dogs.jpg", margin=0.2)
+    # img_array = depth.find_depth4()
+    # # img_array = np.load('girl_one.npy')
+    # mmean = img_array.mean()
+    # height = len(img_array)
+    # img_array[3 * height // 4:] = mmean - 1
+    # img_array[img_array < mmean] = mmean
+    # img_array = (img_array - img_array.min()) / (img_array.max() - img_array.min())
+    # print(np.max(img_array))
+    # print(np.mean(img_array))
+    # plt.imshow(img_array * 255)
+    # plt.show()
+    # im = Image.fromarray(img_array * 255)
+    # im = im.convert("RGB")
+    # im.save("images/image_depth.png")

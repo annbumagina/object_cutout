@@ -34,7 +34,7 @@ def find_depth4():
     midas.eval()
     midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
     transform = midas_transforms.default_transform
-    img = cv2.imread("resized_img.jpg")
+    img = cv2.imread("images/resized_img.jpg")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     input_batch = transform(img).to(device)
 
